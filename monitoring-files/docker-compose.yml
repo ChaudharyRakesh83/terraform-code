@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./node-alert-rules.yml:/etc/prometheus/node-alert-rules.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    environment:
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=rakesh.singh@clouddrove.com
+      - GF_SMTP_PASSWORD=rkgy gyys nmeh wqxu
+      - GF_SMTP_FROM_ADDRESS=rakesh.singh@clouddrove.com
+      - GF_SMTP_FROM_NAME=Grafana
+      - GF_SMTP_SKIP_VERIFY=true
+    depends_on:
+      - prometheus
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.8.0
+    container_name: loki
+    command: -config.file=/mnt/config/loki-config.yaml
+    volumes:
+      - ./loki:/mnt/config
+      - ./loki/index:/loki/index
+      - ./loki/cache:/loki/cache
+      - ./loki/chunks:/loki/chunks
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:2.8.0
+    container_name: promtail
+    command: -config.file=/mnt/config/promtail-config.yaml
+    volumes:
+      - ./promtail:/mnt/config
+      - /home/rakesh/django/logs:/django/logs
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    ports:
+      - "16686:16686"   # UI port
+      - "14268:14268"   # HTTP Jaeger collector (for OpenTelemetry)
+      - "4317:4317"     # gRPC OTLP collector
+    restart: always
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    restart: unless-stopped
+
+
+volumes:
+  grafana-storage:
